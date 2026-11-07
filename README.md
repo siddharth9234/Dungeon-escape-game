@@ -1,44 +1,40 @@
-🏰 Dungeon Escape
+# 🏰 Dungeon Escape — C Backend Game Engine
 
-A grid-based survival game featuring a pure C systems backend and an interactive, responsive web frontend.
+A high-performance, grid-based survival game engine written in pure C. Designed with a modular architecture separating core state management, matrix coordination, and collision logic from presentation layers.
 
-🚀 About the Project
+---
 
-This project follows a strict "first-principles" separation of concerns:
+## 🚀 Architectural Overview
 
-Backend Logic (monster.c): Developed by Siddharth. It handles low-level matrix management (12x22), coordinate structs, random seed generation (srand), player movement inputs (W/A/S/D), and strict game win/loss/collision conditions.
+- **Engine Core (`monster.c`)**: Native C implementation managing a `12x22` game matrix.
+- **State & Memory Management**: Utilizes custom coordinate structs (`coor pl, mo, move`) for real-time player and monster tracking.
+- **Procedural Mechanics**: Implements pseudo-random spawn generation using `srand(time(NULL))` and dynamic trap memory allocation (`c[x][y]=1`).
+- **Event Loop & Safety**: Clean state evaluation handling wall boundary collisions, win conditions at coordinate `[11][20]`, and active hunt/trap loops.
 
-Frontend UI (index.html): Developed by Gemini to faithfully mirror the C engine logic in a modern browser environment complete with desktop keyboard support and mobile touch controls.
+---
 
-🎮 Game Rules & Mechanics
+## 🎮 Game Rules & Mechanics
 
-Map Size: 12x22 grid surrounded by walls (#).
+- **Grid Size**: `12x22` map bordered by walls (`#`).
+- **Player (`O`)**: Spawns randomly; navigates via standard directional inputs (`W/A/S/D`) to reach the exit gate at `[11][20]`.
+- **Monster (`*`)**: Relocates randomly each turn, leaving behind active hazard traps (`1`).
+- **Conditionals**:
+  - **Loss**: Striking boundaries, colliding with a trap/monster, or getting intercepted before reaching the exit.
+  - **Win**: Successfully navigating to coordinate `[11][20]`.
 
-Player (O): Spawns randomly; objective is to escape to the exit coordinate at [11][20].
+---
 
-Monster (*): Relocates randomly every turn, leaving behind trap tokens (1).
+## 🛠️ Compilation & Execution
 
-Win Condition: Reach the exit door safely.
+Clone the repository and compile the C source file using any standard C compiler (e.g., GCC):
 
-Lose Conditions: Hit a wall, get eaten by the monster/trap, or have the monster reach the exit door first.
+```bash
+# Clone repository
+git clone [https://github.com/siddharth9234/Dungeon-escape-game.git](https://github.com/siddharth9234/Dungeon-escape-game.git)
+cd Dungeon-escape-game
 
-🛠️ How to Run Locally
+# Compile the C engine
+gcc monster.c -o dungeon_escape
 
-1. Compile & Run the C Backend (Terminal)
-
-gcc monster.c -o monster
-./monster
-
-
-2. Run the Web Frontend (Browser)
-
-Simply open index.html in any web browser, or play it live online via GitHub Pages:
-Play Dungeon Escape Live
-
-💻 Tech Stack
-
-Backend: Pure C (<stdio.h>, <stdlib.h>, <string.h>, <time.h>)
-
-Frontend: HTML5, Tailwind CSS, Vanilla JavaScript (ES6)
-
-Deployment: GitHub Pages
+# Run the game engine
+./dungeon_escape
