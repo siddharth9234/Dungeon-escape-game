@@ -38,3 +38,6 @@ gcc monster.c -o dungeon_escape
 
 # Run the game engine
 ./dungeon_escape
+
+
+[![Play Live in Browser](https://img.shields.io/badge/Play-Live%20Demo-brightgreen)](https://siddharth9234.github.io/Dungeon-escape-game/)
