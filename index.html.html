@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Dungeon Escape - Arcade Edition</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'VT323', monospace;
+            background-color: #0b0f19;
+            color: #e2e8f0;
+            touch-action: manipulation;
+        }
+
+        .font-arcade {
+            font-family: 'Press Start 2P', monospace;
+        }
+
+        /* Scanline Overlay */
+        .scanline-bg {
+            background: linear-gradient(
+                to bottom,
+                rgba(255,255,255,0),
+                rgba(255,255,255,0) 50%,
+                rgba(0, 0, 0, 0.4) 50%,
+                rgba(0, 0, 0, 0.4)
+            );
+            background-size: 100% 4px;
+        }
+
+        /* Grid Cell Responsive Sizing */
+        .grid-matrix {
+            display: grid;
+            grid-template-columns: repeat(22, minmax(0, 1fr));
+            gap: 2px;
+            width: 100%;
+            max-width: 820px;
+            aspect-ratio: 22 / 12;
+        }
+
+        .tile {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            user-select: none;
+            border-radius: 3px;
+            transition: all 0.1s ease-in-out;
+            font-size: clamp(10px, 1.8vw, 18px);
+        }
+
+        /* Neon Glows & Animations */
+        .player-glow {
+            box-shadow: 0 0 10px #00f0ff, inset 0 0 6px #00f0ff;
+            animation: pulse-player 1.2s infinite alternate;
+        }
+
+        @keyframes pulse-player {
+            from { transform: scale(0.95); opacity: 0.9; }
+            to { transform: scale(1.05); opacity: 1; }
+        }
+
+        .monster-glow {
+            box-shadow: 0 0 12px #ff0055, inset 0 0 8px #ff0055;
+            animation: pulse-monster 0.6s infinite alternate;
+        }
+
+        @keyframes pulse-monster {
+            from { transform: scale(0.92); }
+            to { transform: scale(1.08); }
+        }
+
+        .exit-glow {
+            box-shadow: 0 0 12px #00ff88, inset 0 0 8px #00ff88;
+            animation: glow-exit 1.5s infinite alternate;
+        }
+
+        @keyframes glow-exit {
+            from { opacity: 0.7; }
+            to { opacity: 1; }
+        }
+
+        .trap-glow {
+            box-shadow: inset 0 0 6px rgba(255, 0, 85, 0.6);
+        }
+
+        /* Custom Touch D-Pad */
+        .dpad-btn {
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .dpad-btn:active {
+            transform: scale(0.90);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-between p-2 sm:p-4 select-none relative overflow-x-hidden">
+
+    <div class="pointer-events-none fixed inset-0 scanline-bg z-40"></div>
+
+    <!-- Header -->
+    <header class="w-full max-w-4xl flex flex-col sm:flex-row items-center justify-between gap-2 border-b-2 border-cyan-500/40 pb-2 z-10">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-cyan-950 border-2 border-cyan-400 flex items-center justify-center text-cyan-400 text-xl font-arcade">
+                C
+            </div>
+            <div>
+                <h1 class="text-xl sm:text-2xl font-arcade text-cyan-400 tracking-wide drop-shadow-[0_0_8px_rgba(0,240,255,0.6)]">
+                    DUNGEON ESCAPE
+                </h1>
+                <p class="text-xs sm:text-sm text-slate-400">Pure C Backend Logic Engine (<code class="text-yellow-400 font-mono">monster.c</code>)</p>
+            </div>
+        </div>
+        <button onclick="initGame()" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 active:bg-cyan-700 text-black font-arcade text-xs rounded border-2 border-cyan-300 font-bold transition-all shadow-[0_0_12px_rgba(0,240,255,0.4)] active:scale-95">
+            <i class="fa-solid fa-rotate-right mr-1"></i> RESTART
+        </button>
+    </header>
+
+    <!-- Main Game Area -->
+    <main class="w-full max-w-4xl flex flex-col items-center gap-3 my-auto z-10 py-2">
+
+        <!-- Status & Telemetry Bar -->
+        <div class="w-full bg-slate-900/90 border-2 border-slate-700 rounded-lg p-2.5 flex flex-wrap items-center justify-between gap-2 text-sm sm:text-base">
+            <div class="flex items-center gap-2">
+                <span id="status-indicator" class="w-3 h-3 rounded-full bg-emerald-400 animate-ping"></span>
+                <span id="game-status" class="font-arcade text-xs sm:text-sm text-emerald-400">STATUS: RUNNING</span>
+            </div>
+            <div class="flex items-center gap-4 text-xs sm:text-sm font-mono">
+                <span class="text-slate-400">PLAYER: <strong id="stat-pl" class="text-cyan-400">[0,0]</strong></span>
+                <span class="text-slate-400">MONSTER: <strong id="stat-mo" class="text-pink-500">[0,0]</strong></span>
+                <span class="text-slate-400">TRAPS: <strong id="stat-traps" class="text-yellow-400">0</strong></span>
+            </div>
+        </div>
+
+        <!-- 12x22 Tile Matrix Display -->
+        <div class="w-full bg-slate-950 p-2 sm:p-3 rounded-xl border-2 border-cyan-500/50 shadow-[0_0_20px_rgba(0,240,255,0.15)] flex flex-col items-center">
+            <div id="grid-container" class="grid-matrix bg-black p-1.5 rounded border border-slate-800">
+                <!-- Tiles dynamically generated -->
+            </div>
+        </div>
+
+        <!-- Controls Section: Desktop Info + Mobile Touch D-Pad -->
+        <div class="w-full grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+            
+            <!-- Terminal Output Log -->
+            <div class="md:col-span-6 bg-slate-950/90 border border-slate-800 rounded-lg p-3 h-36 flex flex-col justify-between">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-1 mb-1">
+                    <span class="font-arcade text-[10px] text-cyan-400">C-CONSOLE (<code class="text-yellow-400">printf</code>)</span>
+                    <span class="text-[10px] text-slate-500">WASD / ARROWS READY</span>
+                </div>
+                <div id="terminal-log" class="font-mono text-xs text-cyan-300 overflow-y-auto space-y-1 h-full pr-1">
+                    <!-- Logs -->
+                </div>
+            </div>
+
+            <!-- Mobile Touch D-Pad Controls -->
+            <div class="md:col-span-6 flex flex-col items-center justify-center bg-slate-900/80 border border-slate-800 rounded-lg p-3">
+                <span class="font-arcade text-[10px] text-slate-400 mb-2">TOUCH D-PAD CONTROLS</span>
+                
+                <div class="grid grid-cols-3 gap-2 w-48 sm:w-56">
+                    <div></div>
+                    <button onclick="handleInput('w')" class="dpad-btn h-12 bg-slate-800 hover:bg-cyan-900 border-2 border-cyan-500 text-cyan-300 rounded-lg font-arcade text-sm font-bold flex flex-col items-center justify-center shadow-[0_4px_0_#0e7490] active:translate-y-1">
+                        <i class="fa-solid fa-chevron-up"></i>
+                        <span class="text-[8px] mt-0.5">W</span>
+                    </button>
+                    <div></div>
+
+                    <button onclick="handleInput('a')" class="dpad-btn h-12 bg-slate-800 hover:bg-cyan-900 border-2 border-cyan-500 text-cyan-300 rounded-lg font-arcade text-sm font-bold flex flex-col items-center justify-center shadow-[0_4px_0_#0e7490] active:translate-y-1">
+                        <i class="fa-solid fa-chevron-left"></i>
+                        <span class="text-[8px] mt-0.5">A</span>
+                    </button>
+                    <button onclick="handleInput('s')" class="dpad-btn h-12 bg-slate-800 hover:bg-cyan-900 border-2 border-cyan-500 text-cyan-300 rounded-lg font-arcade text-sm font-bold flex flex-col items-center justify-center shadow-[0_4px_0_#0e7490] active:translate-y-1">
+                        <i class="fa-solid fa-chevron-down"></i>
+                        <span class="text-[8px] mt-0.5">S</span>
+                    </button>
+                    <button onclick="handleInput('d')" class="dpad-btn h-12 bg-slate-800 hover:bg-cyan-900 border-2 border-cyan-500 text-cyan-300 rounded-lg font-arcade text-sm font-bold flex flex-col items-center justify-center shadow-[0_4px_0_#0e7490] active:translate-y-1">
+                        <i class="fa-solid fa-chevron-right"></i>
+                        <span class="text-[8px] mt-0.5">D</span>
+                    </button>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Legend Bar -->
+        <div class="w-full flex flex-wrap justify-center items-center gap-4 text-xs sm:text-sm text-slate-300 bg-slate-900/60 p-2 rounded-lg border border-slate-800">
+            <div class="flex items-center gap-1.5">
+                <span class="w-4 h-4 rounded bg-cyan-500 text-black font-bold flex items-center justify-center text-[10px]">O</span>
+                <span>Player</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <span class="w-4 h-4 rounded bg-pink-600 text-white font-bold flex items-center justify-center text-[10px]">*</span>
+                <span>Monster</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <span class="w-4 h-4 rounded bg-pink-950 border border-pink-700 text-pink-400 font-bold flex items-center justify-center text-[10px]">1</span>
+                <span>Trap Tile (<code class="text-pink-400 font-mono">c[x][y]=1</code>)</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <span class="w-4 h-4 rounded bg-emerald-500 text-black font-bold flex items-center justify-center text-[10px]">E</span>
+                <span>Exit Door (<code class="text-emerald-400 font-mono">[11][20]</code>)</span>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="w-full max-w-4xl text-center text-xs text-slate-500 border-t border-slate-800/80 pt-2 z-10">
+        Responsive Web Arcade Wrapper • C Systems Logic Preserved
+    </footer>
+
+    <!-- C Engine Implementation in JS -->
+    <script>
+        // Exact 1:1 C Engine State Variables
+        let map = Array(12).fill(null).map(() => Array(22).fill(' '));
+        let c = Array(12).fill(null).map(() => Array(22).fill(0));
+
+        let pl = { x: 0, y: 0 };
+        let mo = { x: 0, y: 0 };
+        let move = { m: ' ' };
+        let isGameOver = false;
+        let trapCount = 0;
+
+        function randInt(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+
+        function initMap() {
+            for (let i = 0; i < 12; i++) {
+                for (let j = 0; j < 22; j++) {
+                    if (i === 0 || i === 11 || j === 0 || j === 21) {
+                        map[i][j] = '#';
+                    } else {
+                        map[i][j] = ' ';
+                    }
+                }
+            }
+            // map[11][20] = ' '; (Exit Door)
+            map[11][20] = ' ';
+        }
+
+        function logConsole(text, styleClass = 'text-cyan-300') {
+            const consoleBox = document.getElementById('terminal-log');
+            const line = document.createElement('div');
+            line.className = styleClass;
+            line.innerText = text;
+            consoleBox.appendChild(line);
+            consoleBox.scrollTop = consoleBox.scrollHeight;
+        }
+
+        function renderGrid() {
+            const container = document.getElementById('grid-container');
+            container.innerHTML = '';
+
+            for (let i = 0; i < 12; i++) {
+                for (let j = 0; j < 22; j++) {
+                    const tile = document.createElement('div');
+                    tile.className = 'tile ';
+
+                    const isPlayer = (i === pl.x && j === pl.y);
+                    const isMonster = (i === mo.x && j === mo.y);
+                    const isExit = (i === 11 && j === 20);
+                    const isTrap = (c[i][j] === 1);
+                    const isWall = (map[i][j] === '#');
+
+                    if (isPlayer) {
+                        tile.className += 'bg-cyan-500 text-black font-arcade player-glow z-20';
+                        tile.innerText = 'O';
+                    } else if (isMonster) {
+                        tile.className += 'bg-pink-600 text-white font-arcade monster-glow z-20';
+                        tile.innerText = '*';
+                    } else if (isExit) {
+                        tile.className += 'bg-emerald-500 text-black font-arcade exit-glow z-10';
+                        tile.innerText = 'E';
+                    } else if (isTrap) {
+                        tile.className += 'bg-pink-950/80 text-pink-400 border border-pink-800/60 trap-glow';
+                        tile.innerText = '1';
+                    } else if (isWall) {
+                        tile.className += 'bg-slate-900 text-slate-700 border border-slate-800';
+                        tile.innerText = '#';
+                    } else {
+                        tile.className += 'bg-slate-950 text-slate-800 border border-slate-900/40';
+                        tile.innerText = ' ';
+                    }
+
+                    container.appendChild(tile);
+                }
+            }
+
+            // Update stats
+            document.getElementById('stat-pl').innerText = `[${pl.x},${pl.y}]`;
+            document.getElementById('stat-mo').innerText = `[${mo.x},${mo.y}]`;
+            document.getElementById('stat-traps').innerText = trapCount;
+        }
+
+        function initGame() {
+            isGameOver = false;
+            trapCount = 0;
+            c = Array(12).fill(null).map(() => Array(22).fill(0));
+            initMap();
+
+            document.getElementById('terminal-log').innerHTML = '';
+            const statusElem = document.getElementById('game-status');
+            const statusInd = document.getElementById('status-indicator');
+            statusElem.className = 'font-arcade text-xs sm:text-sm text-emerald-400';
+            statusElem.innerText = 'STATUS: RUNNING';
+            statusInd.className = 'w-3 h-3 rounded-full bg-emerald-400 animate-ping';
+
+            // Initial Spawn Logic matching monster.c
+            pl.x = randInt(1, 10);
+            pl.y = randInt(1, 20);
+
+            mo.x = randInt(1, 10);
+            mo.y = randInt(1, 20);
+
+            while (mo.x === pl.x && mo.y === pl.y) {
+                mo.x = randInt(1, 10);
+                mo.y = randInt(1, 20);
+            }
+
+            logConsole("System Ready. Game Initialized.", "text-yellow-400 font-bold");
+            logConsole(`Player: [${pl.x}, ${pl.y}] | Monster: [${mo.x}, ${mo.y}]`);
+            logConsole("Enter move (W/A/S/D) to escape:");
+
+            renderGrid();
+        }
+
+        function handleInput(key) {
+            if (isGameOver) return;
+
+            const inputChar = key.toLowerCase();
+            if (!['w', 'a', 's', 'd'].includes(inputChar)) return;
+
+            // Monster Random Jump (monster.c loop)
+            mo.x = randInt(1, 10);
+            mo.y = randInt(1, 20);
+            while (mo.x === pl.x && mo.y === pl.y) {
+                mo.x = randInt(1, 10);
+                mo.y = randInt(1, 20);
+            }
+
+            map[mo.x][mo.y] = '*';
+            map[pl.x][pl.y] = 'O';
+
+            // Mark trap
+            if (c[mo.x][mo.y] === 0) {
+                c[mo.x][mo.y] = 1;
+                trapCount++;
+            }
+
+            // Player movement
+            move.m = inputChar;
+            if (move.m === 'w') { map[pl.x][pl.y] = ' '; pl.x = pl.x - 1; }
+            if (move.m === 'a') { map[pl.x][pl.y] = ' '; pl.y = pl.y - 1; }
+            if (move.m === 's') { map[pl.x][pl.y] = ' '; pl.x = pl.x + 1; }
+            if (move.m === 'd') { map[pl.x][pl.y] = ' '; pl.y = pl.y + 1; }
+
+            // Evaluate Exact Conditions from monster.c
+            if (pl.x === 0 || pl.x === 11 || pl.y === 0 || pl.y === 21) {
+                if (pl.x === 11 && pl.y === 20) {
+                    logConsole("You won!!", "text-emerald-400 font-bold text-sm");
+                    endGame("STATUS: YOU WON!!", "text-emerald-400", "bg-emerald-400");
+                } else {
+                    logConsole("You strike with the wall!!", "text-red-400 font-bold text-sm");
+                    endGame("STATUS: HIT WALL", "text-red-500", "bg-red-500");
+                }
+            } else if (c[pl.x][pl.y] === 1) {
+                logConsole("Monster ate you!!", "text-red-400 font-bold text-sm");
+                endGame("STATUS: EATEN BY MONSTER", "text-red-500", "bg-red-500");
+            } else if (mo.x === 10 && mo.y === 20) {
+                logConsole("Door is closed!!\nYou lost!!", "text-red-400 font-bold text-sm");
+                endGame("STATUS: DOOR CLOSED", "text-red-500", "bg-red-500");
+            } else {
+                logConsole(`Moved '${move.m.toUpperCase()}' -> Pos: [${pl.x}, ${pl.y}]`);
+            }
+
+            renderGrid();
+        }
+
+        function endGame(statusText, textClass, bgClass) {
+            isGameOver = true;
+            const statusElem = document.getElementById('game-status');
+            const statusInd = document.getElementById('status-indicator');
+            statusElem.className = `font-arcade text-xs sm:text-sm ${textClass}`;
+            statusElem.innerText = statusText;
+            statusInd.className = `w-3 h-3 rounded-full ${bgClass}`;
+        }
+
+        // Event Listeners for Keyboard (WASD & Arrow Keys)
+        window.addEventListener('keydown', (e) => {
+            let key = e.key.toLowerCase();
+            if (key === 'arrowup') key = 'w';
+            if (key === 'arrowleft') key = 'a';
+            if (key === 'arrowdown') key = 's';
+            if (key === 'arrowright') key = 'd';
+
+            if (['w', 'a', 's', 'd'].includes(key)) {
+                e.preventDefault();
+                handleInput(key);
+            }
+        });
+
+        // Window Load
+        window.onload = function() {
+            initGame();
+        };
+    </script>
+</body>
+</html>
